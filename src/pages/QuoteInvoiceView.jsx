@@ -1,0 +1,306 @@
+import React, { useContext } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { DataContext } from "../context/DataContext.jsx";
+import { motion } from "framer-motion";
+import { FileText, Trash } from "lucide-react";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import * as XLSX from "xlsx";
+import {
+    Card,
+    CardHeader,
+    CardTitle,
+    CardContent,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+    Table,
+    TableHeader,
+    TableBody,
+    TableRow,
+    TableHead,
+    TableCell,
+} from "@/components/ui/table";
+
+export default function QuoteInvoiceView() {
+    const { docId } = useParams();
+    const navigate = useNavigate();
+    const {
+        data: { clients, docs },
+        deleteDoc,
+        account,
+    } = useContext(DataContext);
+    const doc = docs.find((d) => d.id === Number(docId));
+    const client = clients.find((c) => c.id === doc?.clientId);
+
+    if (!doc || !client) return <div className="p-6">Document introuvable</div>;
+
+
+    const generatePdfContent = (pdf, doc, client, account) => {
+
+        // Bloc client à gauche
+        pdf.setDrawColor(0);
+        pdf.setLineWidth(0.1);
+        pdf.rect(14, 20, 80, 45);
+
+
+        pdf.setFontSize(12);
+        pdf.text(client.name, 16, 28);
+        pdf.setFontSize(10);
+        if (client.address) pdf.text(client.address, 16, 34);
+        if (client.postalCode && client.city) pdf.text(`${client.postalCode} ${client.city}`, 16, 40);
+        if (client.phone) pdf.text(`Tél : ${client.phone}`, 16, 52);
+        if (client.email) pdf.text(`Email : ${client.email}`, 16, 57);
+        if (client.siret) pdf.text(`SIRET : ${client.siret}`, 16, 63);
+
+        let y = 100;
+
+        // Cadre entreprise à droite
+        pdf.setDrawColor(0);
+        pdf.setLineWidth(0.1);
+
+        /*pdf.text("TEST ENTREPRISE", 125, 40);*/
+
+        pdf.rect(120, 20, 80, 45); // x décalé à droite
+
+// Logo (optionnel)
+        const logo = account.logo;
+        if (logo) {
+            pdf.addImage(logo, "PNG", 125, 22, 50, 15); // petit logo dans le cadre
+        }
+
+// Texte entreprise dans le cadre
+        let yEnt = 45;
+        pdf.setFontSize(12);
+        pdf.text(account.companyName || "AUCUNE DONNÉE", 125, yEnt);
+        pdf.setFontSize(10);
+        yEnt += 5;
+        pdf.text(account.companyAddress, 125, yEnt);
+        yEnt += 5;
+        pdf.text(`${account.companyPostalCode} ${account.companyCity}`, 125, yEnt);
+        yEnt += 5;
+        if (account.companySiret) {
+            pdf.text(`SIRET : ${account.companySiret}`, 125, yEnt);
+        }
+
+        // Titre
+        pdf.setFontSize(14);
+        pdf.text(`${doc.type === "quote" ? "Devis" : "Facture"} #${doc.number}`, 14, 75);
+        if (doc.description) {
+            pdf.setFontSize(11);
+            pdf.text(`Objet : ${doc.description}`, 14, 78);
+        }
+
+        pdf.setFontSize(10);
+        const docDate = doc.date || doc.createdAt;
+        const formattedDate = new Date(docDate).toLocaleDateString("fr-FR");
+        pdf.text(`date de création: ${formattedDate}`, 14, 85);
+
+        const fileNameFormattedDate = new Date(docDate).toISOString().split("T")[0]; // format AAAA-MM-JJ
+        const filename = `${doc.type === "quote" ? "devis" : "facture"}_${doc.number}_${fileNameFormattedDate}.pdf`;
+
+
+        // Tableau
+        pdf.setFontSize(10);
+
+        /*
+
+        pdf.text("Produit", 14, y);
+        pdf.text("Qté", 70, y);
+        pdf.text("Prix HT", 90, y);
+        pdf.text("TVA %", 120, y);
+        pdf.text("Prix TTC", 150, y);
+        y += 6;
+
+        doc.lines.forEach((l) => {
+            pdf.text(l.product, 14, y);
+            pdf.text(String(l.qty), 70, y);
+            pdf.text(`${l.price.toFixed(2)} €`, 90, y);
+            pdf.text(`${l.tva.toFixed(2)} %`, 120, y);
+            const ttc = (l.qty * l.price * (1 + l.tva / 100)).toFixed(2);
+            pdf.text(`${ttc} €`, 150, y);
+            y += 6;
+        }); */
+
+        autoTable(pdf, {
+            head: [["Produit", "Qté", "Prix HT", "TVA %", "Prix TTC"]],
+            headStyles: { fillColor: [122, 191, 126] },
+            body: doc.lines.map((line) => {
+                const ttc = (line.qty * line.price * (1 + line.tva / 100)).toFixed(2);
+                return [
+                    line.product,
+                    String(line.qty),
+                    `${line.price.toFixed(2)} €`,
+                    `${line.tva.toFixed(2)} %`,
+                    `${ttc} €`,
+                ];
+            }),
+            startY: 100, // commence après les infos
+            styles: { fontSize: 10 },
+            theme: "grid",
+        });
+
+
+        // Totaux
+        y = pdf.lastAutoTable.finalY + 10;
+        pdf.text(`Sous-total HT : ${doc.totals.ht.toFixed(2)} €`, 120, y);
+        y += 6;
+        pdf.text(`Total TVA : ${doc.totals.tva.toFixed(2)} €`, 120, y);
+        y += 6;
+        pdf.setFontSize(12);
+        pdf.text(`Total TTC : ${doc.totals.ttc.toFixed(2)} €`, 120, y);
+
+
+        /* MENTIONS LÉGALES */
+        y += 30;
+        pdf.setFontSize(8);
+        pdf.text("TVA non applicable, article 293B du CGI", 14, y);
+
+        y += 5;
+        pdf.text("Conditions générales de vente disponibles sur demande.", 14, y);
+
+        /* Signatures */
+
+        y += 30;
+        pdf.setFontSize(10);
+        pdf.text("Signature client :", 14, y);
+        pdf.line(50, y + 1, 110, y + 1); // ligne horizontale
+
+        pdf.text("Signature entreprise :", 120, y);
+        pdf.line(165, y + 1, 200, y + 1); // ligne horizontale
+
+
+        const pageCount = pdf.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            pdf.setPage(i);
+            pdf.setFontSize(8);
+            pdf.text(`Page ${i} / ${pageCount}`, 100, 290); // centré bas de page
+        }
+
+        return pdf;
+    };
+    const previewPDF = () => {
+        const pdf = new jsPDF();
+        generatePdfContent(pdf, doc, client, account);
+        pdf.output("dataurlnewwindow");
+    };
+
+    const exportPDF = () => {
+        const pdf = new jsPDF();
+        generatePdfContent(pdf, doc, client, account);
+
+        const docDate = doc.date || doc.createdAt;
+        const formattedDate = new Date(docDate).toISOString().split("T")[0];
+        const filename = `${doc.type === "quote" ? "devis" : "facture"}_${doc.number}_${formattedDate}.pdf`;
+
+        pdf.save(filename);
+    };
+    const exportExcel = () => {
+        const wsData = [
+            ["Client :", client.name],
+            client.address ? ["Adresse :", client.address] : [],
+            client.postalCode && client.city ? ["", `${client.postalCode} ${client.city}`] : [],
+            client.phone ? ["Téléphone :", client.phone] : [],
+            client.email ? ["Email :", client.email] : [],
+            [],
+            ["Entreprise :", account.companyName],
+            account.companyAddress ? ["Adresse :", account.companyAddress] : [],
+            account.companyPostalCode && account.companyCity ? ["", `${account.companyPostalCode} ${account.companyCity}`] : [],
+            account.companySiret ? ["SIRET :", account.companySiret] : [],
+            [],
+            ["Produit", "Qté", "Prix HT", "TVA %", "Prix TTC"],
+            ...doc.lines.map((l) => [
+                l.product,
+                l.qty,
+                l.price,
+                l.tva,
+                (l.qty * l.price * (1 + l.tva / 100)).toFixed(2),
+            ]),
+            [],
+            ["", "", "Sous‑total HT", doc.totals.ht.toFixed(2)],
+            ["", "", "Total TVA", doc.totals.tva.toFixed(2)],
+            ["", "", "Total TTC", doc.totals.ttc.toFixed(2)],
+        ];
+        const ws = XLSX.utils.aoa_to_sheet(wsData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, doc.type);
+        XLSX.writeFile(wb, `${doc.type}-${doc.id}.xlsx`);
+        ws['A1'].s = { font: { bold: true } };
+    };
+
+    const handleDelete = () => {
+        if (!window.confirm("Supprimer ce document ?")) return;
+        deleteDoc(doc.id);
+        navigate(`/clients/${client.id}`);
+    };
+
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-6 space-y-6 max-w-3xl mx-auto"
+        >
+            <Card>
+                <CardHeader>
+                    <CardTitle>
+                        {doc.type === "quote" ? "Devis" : "Facture"} #{doc.number} – {client.name}
+                        <p>{client.address}</p>
+                        <p>{client.postalCode} {client.city}</p>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Produit</TableHead>
+                                <TableHead>Qté</TableHead>
+                                <TableHead>Prix HT</TableHead>
+                                <TableHead>TVA %</TableHead>
+                                <TableHead>Prix TTC</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {doc.lines.map((l) => (
+                                <TableRow key={l.id}>
+                                    <TableCell>{l.product}</TableCell>
+                                    <TableCell>{l.qty}</TableCell>
+                                    <TableCell>{l.price} €</TableCell>
+                                    <TableCell>{l.tva} %</TableCell>
+                                    <TableCell>{((l.qty * l.price * (1 + l.tva / 100))).toFixed(2)} €</TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+
+                    <div className="text-right space-y-1 text-sm pt-4">
+                        <p>Sous‑total HT : {doc.totals.ht.toFixed(2)} €</p>
+                        <p>Total TVA : {doc.totals.tva.toFixed(2)} €</p>
+                        <p className="font-semibold">Total TTC : {doc.totals.ttc.toFixed(2)} €</p>
+                    </div>
+                    <Button onClick={previewPDF} variant="outline">
+                        Aperçu PDF
+                    </Button>
+                    <div className="pt-6 flex gap-2">
+                        <Button onClick={exportPDF}>
+                            <FileText className="mr-2 h-4 w-4" /> Exporter PDF
+                        </Button>
+                        <Button variant="secondary" onClick={exportExcel}>
+                            <FileText className="mr-2 h-4 w-4" /> Exporter Excel
+                        </Button>
+                        <Button variant="outline" onClick={() => navigate(`/clients/${client.id}`)}>
+                            Fiche client
+                        </Button>
+
+                        <Button variant="outline" onClick={() => navigate(-1)}>Retour</Button>
+
+                    </div>
+                    <Button variant="destructive" onClick={handleDelete}>
+                        <Trash className="mr-2 h-4 w-4" /> Supprimer
+                    </Button>
+
+                </CardContent>
+            </Card>
+        </motion.div>
+    );
+}

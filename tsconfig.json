@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    /* Dossier racine des imports relatifs */
+    "baseUrl": ".",
+
+    /* === ALIAS requis par shadcn/ui === */
+    "paths": {
+      "@/*": ["src/*"]
+    },
+    "jsx": "react"
+  },
+  "include": ["src"]
+}
