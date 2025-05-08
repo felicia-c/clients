@@ -35,8 +35,9 @@ export default function QuoteInvoiceForm({ type }) {
     const addLine = () => setLines((l) => [...l, { id: Date.now(), product: "", qty: 1, price: 0, tva: 20 }]);
     const removeLine = (lineId) => setLines((l) => l.filter((x) => x.id !== lineId));
 
-    const totals = lines.reduce(
-        (acc, l) => {
+    const totals = lines
+        .filter((l) => l.type !== "text")
+        .reduce((acc, l) => {
             const ht = l.qty * l.price;
             const tva = (ht * l.tva) / 100;
             acc.ht += ht;
@@ -65,6 +66,9 @@ export default function QuoteInvoiceForm({ type }) {
         addDoc(doc);
         navigate(`/docs/${doc.id}`);
     };
+
+    const addText = () =>
+        setLines((l) => [...l, { id: Date.now(), type: "text", content: "" }]);
 
     if (!client) return <div className="p-6">Client introuvable</div>;
 
@@ -95,6 +99,32 @@ export default function QuoteInvoiceForm({ type }) {
                         </TableHeader>
                         <TableBody>
                             {lines.map((l, idx) => (
+                                l.type === "text" ? (
+                                    <TableRow key={l.id}>
+                                        <TableCell colSpan={5}>
+                                            <Input
+                                                placeholder="Texte libre"
+                                                value={l.content}
+                                                onChange={(e) =>
+                                                    setLines((prev) => {
+                                                        const copy = [...prev];
+                                                        copy[idx].content = e.target.value;
+                                                        return copy;
+                                                    })
+                                                }
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                onClick={() => removeLine(l.id)}
+                                            >
+                                                <Trash className="h-4 w-4" />
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
                                 <TableRow key={l.id}>
                                     <TableCell>
                                         <Input
@@ -156,6 +186,7 @@ export default function QuoteInvoiceForm({ type }) {
                                         </Button>
                                     </TableCell>
                                 </TableRow>
+                                )
                             ))}
                         </TableBody>
                     </Table>
@@ -163,6 +194,9 @@ export default function QuoteInvoiceForm({ type }) {
                     <div className="flex justify-between items-center pt-4">
                         <Button variant="secondary" onClick={addLine}>
                             <PlusCircle className="mr-2 h-4 w-4" /> Ajouter une ligne
+                        </Button>
+                        <Button variant="secondary" onClick={addText}>
+                            <PlusCircle className="mr-2 h-4 w-4" /> Ajouter du texte
                         </Button>
                         <div className="text-right space-y-1 text-sm">
                             <p>Sous‑total HT : {totals.ht.toFixed(2)} €</p>
