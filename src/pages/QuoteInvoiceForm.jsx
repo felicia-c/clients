@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { DataContext } from "../context/DataContext.jsx";
 import { motion } from "framer-motion";
 import { PlusCircle, Trash } from "lucide-react";
@@ -31,9 +31,11 @@ export default function QuoteInvoiceForm({ type }) {
     } = useContext(DataContext);
     const { id } = useParams();
     const { docId } = useParams();
+    const { state } = useLocation();
+    const convertTo = state?.convertTo;
     const isEdit = Boolean(docId);
     const editingDoc = isEdit ? docs.find((d) => d.id === Number(docId)) : null;
-    const trueType = type || editingDoc?.type || "quote";
+    const trueType = convertTo || type || editingDoc?.type || "quote";
     const navigate = useNavigate();
     const originalStatus = editingDoc?.status || "en cours";
 
@@ -49,13 +51,6 @@ export default function QuoteInvoiceForm({ type }) {
     */
     const statusLocksNumber = ["envoyé", "envoyée", "accepté", "payée", "à modifier", "refusé", "annulée"];
 
-    const lastQuote = docs.filter(d => d.type === "quote").map(d => d.number || 0);
-    const lastInvoice = docs.filter(d => d.type === "invoice").map(d => d.number || 0);
-    const nextQuoteNumber = lastQuote.length > 0 ? Math.max(...lastQuote) + 1 : 1;
-    const nextInvoiceNumber = lastInvoice.length > 0 ? Math.max(...lastInvoice) + 1 : 1;
-
-    const shouldDuplicate = isEdit && statusLocksNumber.includes(originalStatus);
-    const newNumber = trueType === "quote" ? nextQuoteNumber : nextInvoiceNumber;
 
     const [title, setTitle] = useState(editingDoc?.title || "");
     const [description, setDescription] = useState(editingDoc?.description || "");
@@ -85,12 +80,21 @@ export default function QuoteInvoiceForm({ type }) {
     if (isEdit && !editingDoc) return <div className="p-6">Document introuvable</div>;
 
     const saveDoc = () => {
+        const lastQuote = docs.filter(d => d.type === "quote").map(d => d.number || 0);
+        const lastInvoice = docs.filter(d => d.type === "invoice").map(d => d.number || 0);
+        const nextQuoteNumber = lastQuote.length > 0 ? Math.max(...lastQuote) + 1 : 1;
+        const nextInvoiceNumber = lastInvoice.length > 0 ? Math.max(...lastInvoice) + 1 : 1;
+
+        const shouldDuplicate =
+            (isEdit && statusLocksNumber.includes(originalStatus)) || convertTo === "invoice";
+        const newNumber = trueType === "quote" ? nextQuoteNumber : nextInvoiceNumber;
+
         const doc = {
             id: shouldDuplicate ? Date.now() : editingDoc?.id || Date.now(),
             number: shouldDuplicate ? newNumber : editingDoc?.number || newNumber,
             clientId: client.id,
+            status: "en cours",
             type: trueType,
-            status: shouldDuplicate ? "en cours" : originalStatus,
             createdAt: new Date().toISOString(),
             title,
             description,

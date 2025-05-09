@@ -34,6 +34,7 @@ export default function QuoteInvoiceView() {
     const doc = docs.find((d) => d.id === Number(docId));
     const client = clients.find((c) => c.id === doc?.clientId);
 
+
     const stripHtml = (html) => {
         const tmp = document.createElement("div");
         tmp.innerHTML = html;
@@ -88,6 +89,12 @@ export default function QuoteInvoiceView() {
         yEnt += 5;
         if (account.companySiret) {
             pdf.text(`SIRET : ${account.companySiret}`, 125, yEnt);
+        }
+
+        if (!doc.number) {
+            const docsOfType = docs.filter(d => d.type === doc.type && d.number);
+            const next = docsOfType.length > 0 ? Math.max(...docsOfType.map(d => d.number)) + 1 : 1;
+            doc.number = next;
         }
 
         // Titre
@@ -356,6 +363,16 @@ export default function QuoteInvoiceView() {
                         Modifier
                     </Button>
                     <div className="pt-6 flex gap-2">
+
+                        {doc.type === "quote" && (
+                            <Button
+                                variant="default"
+                                onClick={() => navigate(`/docs/${doc.id}/edit`, { state: { convertTo: "invoice" } })}
+                            >
+                                Transformer en facture
+                            </Button>
+                        )}
+
                         <Button onClick={exportPDF}>
                             <FileText className="mr-2 h-4 w-4" /> Exporter PDF
                         </Button>
