@@ -35,6 +35,7 @@ export default function QuoteInvoiceForm({ type }) {
     const editingDoc = isEdit ? docs.find((d) => d.id === Number(docId)) : null;
     const trueType = type || editingDoc?.type || "quote";
     const navigate = useNavigate();
+    const originalStatus = editingDoc?.status || "en cours";
 
     const client = isEdit
         ? clients.find((c) => c.id === editingDoc?.clientId)
@@ -46,15 +47,22 @@ export default function QuoteInvoiceForm({ type }) {
     const [longDescription, setLongDescription] = useState("");
     const [lines, setLines] = useState([{ id: 1, product: "", qty: 1, price: 0, tva: 20 }]);
     */
+    const statusLocksNumber = ["envoyé", "envoyée", "accepté", "payée", "à modifier", "refusé", "annulée"];
 
-    const lastNumber = docs.length > 0 ? Math.max(...docs.map(d => d.number || 0)) : 0;
-    const nextNumber = lastNumber + 1;
+    const lastQuote = docs.filter(d => d.type === "quote").map(d => d.number || 0);
+    const lastInvoice = docs.filter(d => d.type === "invoice").map(d => d.number || 0);
+    const nextQuoteNumber = lastQuote.length > 0 ? Math.max(...lastQuote) + 1 : 1;
+    const nextInvoiceNumber = lastInvoice.length > 0 ? Math.max(...lastInvoice) + 1 : 1;
+
+    const shouldDuplicate = isEdit && statusLocksNumber.includes(originalStatus);
+    const newNumber = trueType === "quote" ? nextQuoteNumber : nextInvoiceNumber;
 
     const [title, setTitle] = useState(editingDoc?.title || "");
     const [description, setDescription] = useState(editingDoc?.description || "");
     const [longDescription, setLongDescription] = useState(editingDoc?.longDescription || "");
     const [lines, setLines] = useState(editingDoc?.lines || []);
-    const [number, setNumber] = useState(editingDoc?.number || nextNumber);
+    //const [number, setNumber] = useState(editingDoc?.number || nextNumber);
+
 
 
 
@@ -78,11 +86,11 @@ export default function QuoteInvoiceForm({ type }) {
 
     const saveDoc = () => {
         const doc = {
-            id: Date.now(),
-            number: nextNumber,
+            id: shouldDuplicate ? Date.now() : editingDoc?.id || Date.now(),
+            number: shouldDuplicate ? newNumber : editingDoc?.number || newNumber,
             clientId: client.id,
             type: trueType,
-            status: trueType === "quote" ? "en cours" : "en cours",
+            status: shouldDuplicate ? "en cours" : originalStatus,
             createdAt: new Date().toISOString(),
             title,
             description,
@@ -94,8 +102,11 @@ export default function QuoteInvoiceForm({ type }) {
             clientCity: client.city,
             clientPhone: client.phone,
         };
-        if (isEdit) {
-            updateDoc(editingDoc.id, doc);
+
+        if (shouldDuplicate) {
+            addDoc(doc);
+        } else if (isEdit) {
+            updateDoc(doc.id, doc);
         } else {
             addDoc(doc);
         }
