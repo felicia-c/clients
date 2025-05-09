@@ -3,6 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { DataContext } from "../context/DataContext.jsx";
 import { motion } from "framer-motion";
 import { PlusCircle, Trash } from "lucide-react";
+import SunEditor from "suneditor-react";
+import "suneditor/dist/css/suneditor.min.css";
+
 import {
     Card,
     CardHeader,
@@ -28,6 +31,9 @@ export default function QuoteInvoiceForm({ type }) {
         addDoc,
     } = useContext(DataContext);
     const client = clients.find((c) => c.id === Number(id));
+    const [title, setTitle] = useState("");
+    const [description, setDescription] = useState("");
+    const [longDescription, setLongDescription] = useState("");
     const [lines, setLines] = useState([{ id: 1, product: "", qty: 1, price: 0, tva: 20 }]);
 
     const lastNumber = docs.length > 0 ? Math.max(...docs.map(d => d.number || 0)) : 0;
@@ -56,6 +62,9 @@ export default function QuoteInvoiceForm({ type }) {
             type,
             status: type === "quote" ? "en cours" : "en cours",
             createdAt: new Date().toISOString(),
+            title,
+            description,
+            longDescription,
             lines,
             totals,
             clientAddress: client.address,
@@ -86,6 +95,24 @@ export default function QuoteInvoiceForm({ type }) {
                     <p>{client.phone}</p>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    <Input
+                        placeholder="Titre"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                    />
+                    <Input
+                        placeholder="Description courte"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                    />
+                    <SunEditor
+                        setContents={longDescription}
+                        onChange={setLongDescription}
+                        height="200px"
+                        setOptions={{
+                            buttonList: [["undo", "redo", "bold", "italic", "underline", "list", "align", "fontColor"]],
+                        }}
+                    />
                     <Table>
                         <TableHeader>
                             <TableRow>

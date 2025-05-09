@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { FileText, Trash } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { htmlToText } from "html-to-text";
 import * as XLSX from "xlsx";
 import {
     Card,
@@ -33,21 +34,14 @@ export default function QuoteInvoiceView() {
     const doc = docs.find((d) => d.id === Number(docId));
     const client = clients.find((c) => c.id === doc?.clientId);
 
+    const stripHtml = (html) => {
+        const tmp = document.createElement("div");
+        tmp.innerHTML = html;
+        return tmp.textContent || tmp.innerText || "";
+    };
+
     if (!doc || !client) return <div className="p-6">Document introuvable</div>;
 
-    const totals = doc.lines
-        .filter((l) => l.type !== "text")
-        .reduce(
-            (acc, l) => {
-                const ht = l.qty * l.price;
-                const tva = (ht * l.tva) / 100;
-                acc.ht += ht;
-                acc.tva += tva;
-                acc.ttc += ht + tva;
-                return acc;
-            },
-            { ht: 0, tva: 0, ttc: 0 }
-        );
 
     const generatePdfContent = (pdf, doc, client, account) => {
 
@@ -98,58 +92,43 @@ export default function QuoteInvoiceView() {
 
         // Titre
         pdf.setFontSize(14);
-        pdf.text(`${doc.type === "quote" ? "Devis" : "Facture"} #${doc.number}`, 14, 75);
-        if (doc.description) {
-            pdf.setFontSize(11);
-            pdf.text(`Objet : ${doc.description}`, 14, 78);
-        }
+        pdf.text(`${doc.type === "quote" ? "Devis" : "Facture"} #${doc.number} - ${doc.title}`, 14, 75);
 
         pdf.setFontSize(10);
         const docDate = doc.date || doc.createdAt;
         const formattedDate = new Date(docDate).toLocaleDateString("fr-FR");
-        pdf.text(`date de création: ${formattedDate}`, 14, 85);
+        pdf.setFont(undefined, "bold");
+        pdf.text(`Date d'émission: ${formattedDate}`, 14, 90);
 
         const fileNameFormattedDate = new Date(docDate).toISOString().split("T")[0]; // format AAAA-MM-JJ
         const filename = `${doc.type === "quote" ? "devis" : "facture"}_${doc.number}_${fileNameFormattedDate}.pdf`;
 
 
         // Tableau
-        pdf.setFontSize(10);
-
-        /*
-
-        pdf.text("Produit", 14, y);
-        pdf.text("Qté", 70, y);
-        pdf.text("Prix HT", 90, y);
-        pdf.text("TVA %", 120, y);
-        pdf.text("Prix TTC", 150, y);
-        y += 6;
-
-        doc.lines.forEach((l) => {
-            pdf.text(l.product, 14, y);
-            pdf.text(String(l.qty), 70, y);
-            pdf.text(`${l.price.toFixed(2)} €`, 90, y);
-            pdf.text(`${l.tva.toFixed(2)} %`, 120, y);
-            const ttc = (l.qty * l.price * (1 + l.tva / 100)).toFixed(2);
-            pdf.text(`${ttc} €`, 150, y);
-            y += 6;
-        }); */
-
-        pdf.text(doc.title, 14, 90);
 
         if (doc.description) {
-            pdf.setFontSize(10);
-            pdf.text("Description du projet :", 14, 98);
             pdf.setFont(undefined, "italic");
-            const descriptionLines = pdf.splitTextToSize(doc.longDescription, 180);
-            pdf.text(descriptionLines, 14, 84);
+            //const descriptionLines = pdf.splitTextToSize(doc.longDescription, 180);
+            pdf.text(doc.description, 14, 100);
             pdf.setFont(undefined, "normal");
+            y = 100 + doc.description.length * 6 + 4;
+        }
+        if (doc.longDescription) {
+            pdf.setFont(undefined, "italic");
+            const cleanText = htmlToText(doc.longDescription, {
+                wordwrap: false,
+                selectors: [
+                    { selector: "a", format: "inline" },
+                    { selector: "img", format: "skip" },
+                ],
+            });
+            const lines = pdf.splitTextToSize(cleanText, 180);
+            pdf.text(lines, 14, 110);
+            pdf.setFont(undefined, "normal");
+            y = 110 + lines.length * 6;
         }
 
-        const descriptionLines = pdf.splitTextToSize(doc.longDescription, 180); // largeur max
-        pdf.text(descriptionLines, 14, 84); // affichage
-
-        const startY = 84 + descriptionLines.length * 6; // calcul de la position suivante
+        //const startY = 84 + descriptionLines.length * 6; // calcul de la position suivante
 
         autoTable(pdf, {
             head: [["Produit", "Qté", "Prix HT", "TVA %", "Prix TTC"]],
@@ -168,26 +147,44 @@ export default function QuoteInvoiceView() {
                     return [
                         line.product,
                         String(line.qty),
-                        `${line.totals.price.toFixed(2)} €`,
-                        `${line.totals.tva.toFixed(2)} %`,
-                        `${totals.ttc.toFixed(2)} €`,
+                        `${line.price.toFixed(2)} €`,
+                        `${line.tva.toFixed(2)} %`,
+                        `${ttc} €`,
                     ];
                 }
             }),
-            startY: startY, // commence après les infos
+            startY: y, // commence après les infos
             styles: { fontSize: 10 },
             theme: "grid",
         });
 
 
+        const totals = doc.lines
+            .filter((l) => l.type !== "text")
+            .reduce(
+                (acc, l) => {
+                    const ht = l.qty * l.price;
+                    const tva = (ht * l.tva) / 100;
+                    acc.ht += ht;
+                    acc.tva += tva;
+                    acc.ttc += ht + tva;
+                    return acc;
+                },
+                { ht: 0, tva: 0, ttc: 0 }
+            );
+
         // Totaux
         y = pdf.lastAutoTable.finalY + 10;
-        pdf.text(`Sous-total HT : ${doc.totals.ht.toFixed(2)} €`, 120, y);
+        if (y > 270) {
+            pdf.addPage();
+            y = 20;
+        }
+        pdf.text(`Sous-total HT : ${totals.ht.toFixed(2)} €`, 120, y);
         y += 6;
-        pdf.text(`Total TVA : ${doc.totals.tva.toFixed(2)} €`, 120, y);
+        pdf.text(`Total TVA : ${totals.tva.toFixed(2)} €`, 120, y);
         y += 6;
         pdf.setFontSize(12);
-        pdf.text(`Total TTC : ${doc.totals.ttc.toFixed(2)} €`, 120, y);
+        pdf.text(`Total TTC : ${totals.ttc.toFixed(2)} €`, 120, y);
 
 
         /* MENTIONS LÉGALES */
@@ -208,11 +205,17 @@ export default function QuoteInvoiceView() {
         pdf.text("Signature entreprise :", 120, y);
         pdf.line(165, y + 1, 200, y + 1); // ligne horizontale
 
+        const docTopDate = new Date(doc.date || doc.createdAt).toLocaleDateString("fr-FR");
+        const headerText = `${doc.type === "quote" ? "Devis" : "Facture"} #${doc.number} — Émis le ${docTopDate}`;
+
 
         const pageCount = pdf.internal.getNumberOfPages();
         for (let i = 1; i <= pageCount; i++) {
             pdf.setPage(i);
             pdf.setFontSize(8);
+            if(i != 1) {
+                pdf.text(headerText, 14, 15);
+            }
             pdf.text(`Page ${i} / ${pageCount}`, 100, 290); // centré bas de page
         }
 
@@ -294,9 +297,10 @@ export default function QuoteInvoiceView() {
                     )}
 
                     {doc.longDescription && (
-                        <p className="italic text-muted-foreground text-sm mb-4">
-                            {doc.longDescription}
-                        </p>
+                        <div
+                            className="prose prose-sm max-w-none text-muted-foreground"
+                            dangerouslySetInnerHTML={{ __html: doc.longDescription }}
+                        />
                     )}
 
                     <Table>
