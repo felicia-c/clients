@@ -24,21 +24,41 @@ import {
 } from "@/components/ui/table";
 
 export default function QuoteInvoiceForm({ type }) {
-    const { id } = useParams();
-    const navigate = useNavigate();
     const {
         data: { clients, docs },
         addDoc,
+        updateDoc,
     } = useContext(DataContext);
-    const client = clients.find((c) => c.id === Number(id));
+    const { id } = useParams();
+    const { docId } = useParams();
+    const isEdit = Boolean(docId);
+    const editingDoc = isEdit ? docs.find((d) => d.id === Number(docId)) : null;
+    const trueType = type || editingDoc?.type || "quote";
+    const navigate = useNavigate();
+
+    const client = isEdit
+        ? clients.find((c) => c.id === editingDoc?.clientId)
+        : clients.find((c) => c.id === Number(id));
+
+    /*
     const [title, setTitle] = useState("");
     const [description, setDescription] = useState("");
     const [longDescription, setLongDescription] = useState("");
     const [lines, setLines] = useState([{ id: 1, product: "", qty: 1, price: 0, tva: 20 }]);
+    */
 
     const lastNumber = docs.length > 0 ? Math.max(...docs.map(d => d.number || 0)) : 0;
     const nextNumber = lastNumber + 1;
-    const addLine = () => setLines((l) => [...l, { id: Date.now(), product: "", qty: 1, price: 0, tva: 20 }]);
+
+    const [title, setTitle] = useState(editingDoc?.title || "");
+    const [description, setDescription] = useState(editingDoc?.description || "");
+    const [longDescription, setLongDescription] = useState(editingDoc?.longDescription || "");
+    const [lines, setLines] = useState(editingDoc?.lines || []);
+    const [number, setNumber] = useState(editingDoc?.number || nextNumber);
+
+
+
+    const addLine = () => setLines((l) => [...l, { id: Date.now(), product: "", qty: 1, price: 0, tva: 0 }]);
     const removeLine = (lineId) => setLines((l) => l.filter((x) => x.id !== lineId));
 
     const totals = lines
@@ -54,13 +74,15 @@ export default function QuoteInvoiceForm({ type }) {
         { ht: 0, tva: 0, ttc: 0 }
     );
 
+    if (isEdit && !editingDoc) return <div className="p-6">Document introuvable</div>;
+
     const saveDoc = () => {
         const doc = {
             id: Date.now(),
             number: nextNumber,
             clientId: client.id,
-            type,
-            status: type === "quote" ? "en cours" : "en cours",
+            type: trueType,
+            status: trueType === "quote" ? "en cours" : "en cours",
             createdAt: new Date().toISOString(),
             title,
             description,
@@ -72,7 +94,12 @@ export default function QuoteInvoiceForm({ type }) {
             clientCity: client.city,
             clientPhone: client.phone,
         };
-        addDoc(doc);
+        if (isEdit) {
+            updateDoc(editingDoc.id, doc);
+        } else {
+            addDoc(doc);
+        }
+
         navigate(`/docs/${doc.id}`);
     };
 
@@ -89,7 +116,7 @@ export default function QuoteInvoiceForm({ type }) {
         >
             <Card>
                 <CardHeader>
-                    <CardTitle>{type === "quote" ? "Nouveau devis" : "Nouvelle facture"} – {client.name}</CardTitle>
+                    <CardTitle>{trueType === "quote" ? "Nouveau devis" : "Nouvelle facture"} – {client.name}</CardTitle>
                     <p>{client.address}</p>
                     <p>{client.postalCode} {client.city}</p>
                     <p>{client.phone}</p>

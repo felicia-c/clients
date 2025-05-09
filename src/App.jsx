@@ -38,6 +38,7 @@ export default function App() {
                             <Route path="/clients/:id/new-quote" element={<QuoteInvoiceForm type="quote" />} />
                             <Route path="/clients/:id/new-invoice" element={<QuoteInvoiceForm type="invoice" />} />
                             <Route path="/docs/:docId" element={<QuoteInvoiceView />} />
+                            <Route path="/docs/:docId/edit" element={<QuoteInvoiceForm />} />
                             <Route path="/documents" element={<AllDocuments />} />
                             <Route path="/account" element={<AccountPage />} />
                         </Routes>

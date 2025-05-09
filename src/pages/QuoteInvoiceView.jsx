@@ -296,6 +296,13 @@ export default function QuoteInvoiceView() {
                         <p className="font-semibold text-lg">{doc.title}</p>
                     )}
 
+                    {doc.description && (
+                        <div
+                            className="prose prose-sm max-w-none text-muted-foreground text-md font-semibold"
+                            dangerouslySetInnerHTML={{ __html: doc.description }}
+                        />
+                    )}
+
                     {doc.longDescription && (
                         <div
                             className="prose prose-sm max-w-none text-muted-foreground"
@@ -341,6 +348,12 @@ export default function QuoteInvoiceView() {
                     </div>
                     <Button onClick={previewPDF} variant="outline">
                         Aperçu PDF
+                    </Button>
+                    <Button
+                        variant="outline"
+                        onClick={() => navigate(`/docs/${doc.id}/edit`)}
+                    >
+                        Modifier
                     </Button>
                     <div className="pt-6 flex gap-2">
                         <Button onClick={exportPDF}>
