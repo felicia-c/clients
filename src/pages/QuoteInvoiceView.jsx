@@ -35,6 +35,19 @@ export default function QuoteInvoiceView() {
 
     if (!doc || !client) return <div className="p-6">Document introuvable</div>;
 
+    const totals = doc.lines
+        .filter((l) => l.type !== "text")
+        .reduce(
+            (acc, l) => {
+                const ht = l.qty * l.price;
+                const tva = (ht * l.tva) / 100;
+                acc.ht += ht;
+                acc.tva += tva;
+                acc.ttc += ht + tva;
+                return acc;
+            },
+            { ht: 0, tva: 0, ttc: 0 }
+        );
 
     const generatePdfContent = (pdf, doc, client, account) => {
 
@@ -122,20 +135,46 @@ export default function QuoteInvoiceView() {
             y += 6;
         }); */
 
+        pdf.text(doc.title, 14, 90);
+
+        if (doc.description) {
+            pdf.setFontSize(10);
+            pdf.text("Description du projet :", 14, 98);
+            pdf.setFont(undefined, "italic");
+            const descriptionLines = pdf.splitTextToSize(doc.longDescription, 180);
+            pdf.text(descriptionLines, 14, 84);
+            pdf.setFont(undefined, "normal");
+        }
+
+        const descriptionLines = pdf.splitTextToSize(doc.longDescription, 180); // largeur max
+        pdf.text(descriptionLines, 14, 84); // affichage
+
+        const startY = 84 + descriptionLines.length * 6; // calcul de la position suivante
+
         autoTable(pdf, {
             head: [["Produit", "Qté", "Prix HT", "TVA %", "Prix TTC"]],
             headStyles: { fillColor: [122, 191, 126] },
             body: doc.lines.map((line) => {
-                const ttc = (line.qty * line.price * (1 + line.tva / 100)).toFixed(2);
-                return [
-                    line.product,
-                    String(line.qty),
-                    `${line.price.toFixed(2)} €`,
-                    `${line.tva.toFixed(2)} %`,
-                    `${ttc} €`,
-                ];
+                if (line.type === "text") {
+                    return [
+                        {
+                            content: line.content,
+                            colSpan: 5,
+                            styles: { fontStyle: "italic", textColor: "#666666" },
+                        },
+                    ];
+                } else {
+                    const ttc = (line.qty * line.price * (1 + line.tva / 100)).toFixed(2);
+                    return [
+                        line.product,
+                        String(line.qty),
+                        `${line.totals.price.toFixed(2)} €`,
+                        `${line.totals.tva.toFixed(2)} %`,
+                        `${totals.ttc.toFixed(2)} €`,
+                    ];
+                }
             }),
-            startY: 100, // commence après les infos
+            startY: startY, // commence après les infos
             styles: { fontSize: 10 },
             theme: "grid",
         });
@@ -157,7 +196,7 @@ export default function QuoteInvoiceView() {
         pdf.text("TVA non applicable, article 293B du CGI", 14, y);
 
         y += 5;
-        pdf.text("Conditions générales de vente disponibles sur demande.", 14, y);
+        pdf.text("La date des travaux sera convenue d'un accord commun", 14, y);
 
         /* Signatures */
 
@@ -250,6 +289,16 @@ export default function QuoteInvoiceView() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                    {doc.title && (
+                        <p className="font-semibold text-lg">{doc.title}</p>
+                    )}
+
+                    {doc.longDescription && (
+                        <p className="italic text-muted-foreground text-sm mb-4">
+                            {doc.longDescription}
+                        </p>
+                    )}
+
                     <Table>
                         <TableHeader>
                             <TableRow>
@@ -262,13 +311,21 @@ export default function QuoteInvoiceView() {
                         </TableHeader>
                         <TableBody>
                             {doc.lines.map((l) => (
-                                <TableRow key={l.id}>
-                                    <TableCell>{l.product}</TableCell>
-                                    <TableCell>{l.qty}</TableCell>
-                                    <TableCell>{l.price} €</TableCell>
-                                    <TableCell>{l.tva} %</TableCell>
-                                    <TableCell>{((l.qty * l.price * (1 + l.tva / 100))).toFixed(2)} €</TableCell>
-                                </TableRow>
+                                l.type === "text" ? (
+                                    <TableRow key={l.id}>
+                                        <TableCell colSpan={5} className="italic text-muted-foreground">
+                                            {l.content}
+                                        </TableCell>
+                                    </TableRow>
+                                ) : (
+                                    <TableRow key={l.id}>
+                                        <TableCell>{l.product}</TableCell>
+                                        <TableCell>{l.qty}</TableCell>
+                                        <TableCell>{l.price} €</TableCell>
+                                        <TableCell>{l.tva} %</TableCell>
+                                        <TableCell>{((l.qty * l.price * (1 + l.tva / 100))).toFixed(2)} €</TableCell>
+                                    </TableRow>
+                                )
                             ))}
                         </TableBody>
                     </Table>
