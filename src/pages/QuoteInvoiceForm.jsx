@@ -80,22 +80,16 @@ export default function QuoteInvoiceForm({ type }) {
     if (isEdit && !editingDoc) return <div className="p-6">Document introuvable</div>;
 
     const saveDoc = () => {
-        const lastQuote = docs.filter(d => d.type === "quote").map(d => d.number || 0);
-        const lastInvoice = docs.filter(d => d.type === "invoice").map(d => d.number || 0);
-        const nextQuoteNumber = lastQuote.length > 0 ? Math.max(...lastQuote) + 1 : 1;
-        const nextInvoiceNumber = lastInvoice.length > 0 ? Math.max(...lastInvoice) + 1 : 1;
-
         const shouldDuplicate =
             (isEdit && statusLocksNumber.includes(originalStatus)) || convertTo === "invoice";
-        const newNumber = trueType === "quote" ? nextQuoteNumber : nextInvoiceNumber;
 
         const doc = {
             id: shouldDuplicate ? Date.now() : editingDoc?.id || Date.now(),
-            number: shouldDuplicate ? newNumber : editingDoc?.number || newNumber,
+            //...(shouldDuplicate ? { number: newNumber } : {}),
             clientId: client.id,
             status: "en cours",
             type: trueType,
-            createdAt: new Date().toISOString(),
+            //createdAt: new Date().toISOString(),
             title,
             description,
             longDescription,

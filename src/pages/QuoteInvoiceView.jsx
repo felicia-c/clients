@@ -3,9 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { DataContext } from "../context/DataContext.jsx";
 import { motion } from "framer-motion";
 import { FileText, Trash } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import { htmlToText } from "html-to-text";
 import * as XLSX from "xlsx";
 import {
     Card,
@@ -22,6 +19,7 @@ import {
     TableHead,
     TableCell,
 } from "@/components/ui/table";
+import { generatePdfFromDoc } from "../utils/pdfGenerator";
 
 export default function QuoteInvoiceView() {
     const { docId } = useParams();
@@ -29,6 +27,7 @@ export default function QuoteInvoiceView() {
     const {
         data: { clients, docs },
         deleteDoc,
+        updateDoc,
         account,
     } = useContext(DataContext);
     const doc = docs.find((d) => d.id === Number(docId));
@@ -43,208 +42,39 @@ export default function QuoteInvoiceView() {
 
     if (!doc || !client) return <div className="p-6">Document introuvable</div>;
 
-
-    const generatePdfContent = (pdf, doc, client, account) => {
-
-        // Bloc client à gauche
-        pdf.setDrawColor(0);
-        pdf.setLineWidth(0.1);
-        pdf.rect(14, 20, 80, 45);
-
-
-        pdf.setFontSize(12);
-        pdf.text(client.name, 16, 28);
-        pdf.setFontSize(10);
-        if (client.address) pdf.text(client.address, 16, 34);
-        if (client.postalCode && client.city) pdf.text(`${client.postalCode} ${client.city}`, 16, 40);
-        if (client.phone) pdf.text(`Tél : ${client.phone}`, 16, 52);
-        if (client.email) pdf.text(`Email : ${client.email}`, 16, 57);
-        if (client.siret) pdf.text(`SIRET : ${client.siret}`, 16, 63);
-
-        let y = 100;
-
-        // Cadre entreprise à droite
-        pdf.setDrawColor(0);
-        pdf.setLineWidth(0.1);
-
-        /*pdf.text("TEST ENTREPRISE", 125, 40);*/
-
-        pdf.rect(120, 20, 80, 45); // x décalé à droite
-
-// Logo (optionnel)
-        const logo = account.logo;
-        if (logo) {
-            pdf.addImage(logo, "PNG", 125, 22, 50, 15); // petit logo dans le cadre
+    console.log("DOC PASSED TO PDF GENERATOR", doc);
+    const previewPDF = async () => {
+        if (!doc || !doc.lines) {
+            return alert("Ce document est introuvable ou incomplet.");
         }
 
-// Texte entreprise dans le cadre
-        let yEnt = 45;
-        pdf.setFontSize(12);
-        pdf.text(account.companyName || "AUCUNE DONNÉE", 125, yEnt);
-        pdf.setFontSize(10);
-        yEnt += 5;
-        pdf.text(account.companyAddress, 125, yEnt);
-        yEnt += 5;
-        pdf.text(`${account.companyPostalCode} ${account.companyCity}`, 125, yEnt);
-        yEnt += 5;
-        if (account.companySiret) {
-            pdf.text(`SIRET : ${account.companySiret}`, 125, yEnt);
-        }
-
-        if (!doc.number) {
-            const docsOfType = docs.filter(d => d.type === doc.type && d.number);
-            const next = docsOfType.length > 0 ? Math.max(...docsOfType.map(d => d.number)) + 1 : 1;
-            doc.number = next;
-        }
-
-        // Titre
-        pdf.setFontSize(14);
-        pdf.text(`${doc.type === "quote" ? "Devis" : "Facture"} #${doc.number} - ${doc.title}`, 14, 75);
-
-        pdf.setFontSize(10);
-        const docDate = doc.date || doc.createdAt;
-        const formattedDate = new Date(docDate).toLocaleDateString("fr-FR");
-        pdf.setFont(undefined, "bold");
-        pdf.text(`Date d'émission: ${formattedDate}`, 14, 90);
-
-        const fileNameFormattedDate = new Date(docDate).toISOString().split("T")[0]; // format AAAA-MM-JJ
-        const filename = `${doc.type === "quote" ? "devis" : "facture"}_${doc.number}_${fileNameFormattedDate}.pdf`;
-
-
-        // Tableau
-
-        if (doc.description) {
-            pdf.setFont(undefined, "italic");
-            //const descriptionLines = pdf.splitTextToSize(doc.longDescription, 180);
-            pdf.text(doc.description, 14, 100);
-            pdf.setFont(undefined, "normal");
-            y = 100 + doc.description.length * 6 + 4;
-        }
-        if (doc.longDescription) {
-            pdf.setFont(undefined, "italic");
-            const cleanText = htmlToText(doc.longDescription, {
-                wordwrap: false,
-                selectors: [
-                    { selector: "a", format: "inline" },
-                    { selector: "img", format: "skip" },
-                ],
-            });
-            const lines = pdf.splitTextToSize(cleanText, 180);
-            pdf.text(lines, 14, 110);
-            pdf.setFont(undefined, "normal");
-            y = 110 + lines.length * 6;
-        }
-
-        //const startY = 84 + descriptionLines.length * 6; // calcul de la position suivante
-
-        autoTable(pdf, {
-            head: [["Produit", "Qté", "Prix HT", "TVA %", "Prix TTC"]],
-            headStyles: { fillColor: [122, 191, 126] },
-            body: doc.lines.map((line) => {
-                if (line.type === "text") {
-                    return [
-                        {
-                            content: line.content,
-                            colSpan: 5,
-                            styles: { fontStyle: "italic", textColor: "#666666" },
-                        },
-                    ];
-                } else {
-                    const ttc = (line.qty * line.price * (1 + line.tva / 100)).toFixed(2);
-                    return [
-                        line.product,
-                        String(line.qty),
-                        `${line.price.toFixed(2)} €`,
-                        `${line.tva.toFixed(2)} %`,
-                        `${ttc} €`,
-                    ];
-                }
-            }),
-            startY: y, // commence après les infos
-            styles: { fontSize: 10 },
-            theme: "grid",
-        });
-
-
-        const totals = doc.lines
-            .filter((l) => l.type !== "text")
-            .reduce(
-                (acc, l) => {
-                    const ht = l.qty * l.price;
-                    const tva = (ht * l.tva) / 100;
-                    acc.ht += ht;
-                    acc.tva += tva;
-                    acc.ttc += ht + tva;
-                    return acc;
-                },
-                { ht: 0, tva: 0, ttc: 0 }
-            );
-
-        // Totaux
-        y = pdf.lastAutoTable.finalY + 10;
-        if (y > 270) {
-            pdf.addPage();
-            y = 20;
-        }
-        pdf.text(`Sous-total HT : ${totals.ht.toFixed(2)} €`, 120, y);
-        y += 6;
-        pdf.text(`Total TVA : ${totals.tva.toFixed(2)} €`, 120, y);
-        y += 6;
-        pdf.setFontSize(12);
-        pdf.text(`Total TTC : ${totals.ttc.toFixed(2)} €`, 120, y);
-
-
-        /* MENTIONS LÉGALES */
-        y += 30;
-        pdf.setFontSize(8);
-        pdf.text("TVA non applicable, article 293B du CGI", 14, y);
-
-        y += 5;
-        pdf.text("La date des travaux sera convenue d'un accord commun", 14, y);
-
-        /* Signatures */
-
-        y += 30;
-        pdf.setFontSize(10);
-        pdf.text("Signature client :", 14, y);
-        pdf.line(50, y + 1, 110, y + 1); // ligne horizontale
-
-        pdf.text("Signature entreprise :", 120, y);
-        pdf.line(165, y + 1, 200, y + 1); // ligne horizontale
-
-        const docTopDate = new Date(doc.date || doc.createdAt).toLocaleDateString("fr-FR");
-        const headerText = `${doc.type === "quote" ? "Devis" : "Facture"} #${doc.number} — Émis le ${docTopDate}`;
-
-
-        const pageCount = pdf.internal.getNumberOfPages();
-        for (let i = 1; i <= pageCount; i++) {
-            pdf.setPage(i);
-            pdf.setFontSize(8);
-            if(i != 1) {
-                pdf.text(headerText, 14, 15);
-            }
-            pdf.text(`Page ${i} / ${pageCount}`, 100, 290); // centré bas de page
-        }
-
-        return pdf;
-    };
-    const previewPDF = () => {
-        const pdf = new jsPDF();
-        generatePdfContent(pdf, doc, client, account);
+        const pdf = await generatePdfFromDoc(doc, client, account, docs, updateDoc, false);
         pdf.output("dataurlnewwindow");
     };
 
-    const exportPDF = () => {
-        const pdf = new jsPDF();
-        generatePdfContent(pdf, doc, client, account);
-
-        const docDate = doc.date || doc.createdAt;
-        const formattedDate = new Date(docDate).toISOString().split("T")[0];
-        const filename = `${doc.type === "quote" ? "devis" : "facture"}_${doc.number}_${formattedDate}.pdf`;
-
+    const exportPDF = async () => {
+        const pdf = await generatePdfFromDoc(doc, client, account, docs, updateDoc);
+        const date = new Date(doc.date || new Date()).toISOString().split("T")[0];
+        const filename = `${doc.type === "quote" ? "devis" : "facture"}_${doc.number ?? "XXX"}_${date}.pdf`;
         pdf.save(filename);
     };
+
     const exportExcel = () => {
+        const clonedDoc = { ...doc };
+
+        if (!clonedDoc.number) {
+            const sameTypeDocs = docs.filter(d => d.type === doc.type && d.number);
+            const next = sameTypeDocs.length > 0 ? Math.max(...sameTypeDocs.map(d => d.number)) + 1 : 1;
+            clonedDoc.number = next;
+            updateDoc(clonedDoc.id, { ...clonedDoc });
+        }
+
+        if (!clonedDoc.date) {
+            const today = new Date().toISOString();
+            clonedDoc.date = today;
+            updateDoc(clonedDoc.id, { ...clonedDoc });
+        }
+
         const wsData = [
             ["Client :", client.name],
             client.address ? ["Adresse :", client.address] : [],
@@ -258,7 +88,7 @@ export default function QuoteInvoiceView() {
             account.companySiret ? ["SIRET :", account.companySiret] : [],
             [],
             ["Produit", "Qté", "Prix HT", "TVA %", "Prix TTC"],
-            ...doc.lines.map((l) => [
+            ...clonedDoc.lines.map((l) => [
                 l.product,
                 l.qty,
                 l.price,
@@ -266,14 +96,14 @@ export default function QuoteInvoiceView() {
                 (l.qty * l.price * (1 + l.tva / 100)).toFixed(2),
             ]),
             [],
-            ["", "", "Sous‑total HT", doc.totals.ht.toFixed(2)],
-            ["", "", "Total TVA", doc.totals.tva.toFixed(2)],
-            ["", "", "Total TTC", doc.totals.ttc.toFixed(2)],
+            ["", "", "Sous‑total HT", clonedDoc.totals.ht.toFixed(2)],
+            ["", "", "Total TVA", clonedDoc.totals.tva.toFixed(2)],
+            ["", "", "Total TTC", clonedDoc.totals.ttc.toFixed(2)],
         ];
         const ws = XLSX.utils.aoa_to_sheet(wsData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, doc.type);
-        XLSX.writeFile(wb, `${doc.type}-${doc.id}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, clonedDoc.type);
+        XLSX.writeFile(wb, `${doc.type}-${clonedDoc.id}.xlsx`);
         ws['A1'].s = { font: { bold: true } };
     };
 
@@ -293,7 +123,7 @@ export default function QuoteInvoiceView() {
             <Card>
                 <CardHeader>
                     <CardTitle>
-                        {doc.type === "quote" ? "Devis" : "Facture"} #{doc.number} – {client.name}
+                        {doc.type === 'quote' ? 'Devis' : "Facture"} {doc.number ?? 'XXX'} – {client.name}
                         <p>{client.address}</p>
                         <p>{client.postalCode} {client.city}</p>
                     </CardTitle>
@@ -353,17 +183,16 @@ export default function QuoteInvoiceView() {
                         <p>Total TVA : {doc.totals.tva.toFixed(2)} €</p>
                         <p className="font-semibold">Total TTC : {doc.totals.ttc.toFixed(2)} €</p>
                     </div>
-                    <Button onClick={previewPDF} variant="outline">
-                        Aperçu PDF
-                    </Button>
-                    <Button
-                        variant="outline"
-                        onClick={() => navigate(`/docs/${doc.id}/edit`)}
-                    >
-                        Modifier
-                    </Button>
                     <div className="pt-6 flex gap-2">
-
+                        <Button onClick={previewPDF} variant="outline">
+                            Aperçu PDF
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => navigate(`/docs/${doc.id}/edit`)}
+                        >
+                            Modifier
+                        </Button>
                         {doc.type === "quote" && (
                             <Button
                                 variant="default"
@@ -372,7 +201,8 @@ export default function QuoteInvoiceView() {
                                 Transformer en facture
                             </Button>
                         )}
-
+                    </div>
+                    <div className="pt-6 flex gap-2">
                         <Button onClick={exportPDF}>
                             <FileText className="mr-2 h-4 w-4" /> Exporter PDF
                         </Button>
