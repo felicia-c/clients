@@ -122,6 +122,9 @@ export default function QuoteInvoiceView() {
         >
             <Card>
                 <CardHeader>
+                    <div>
+                        <p className="text-right">{`[ commencé(e) le ${new Date(doc.createdAt).toLocaleDateString("fr-FR")} ]`}</p>
+                    </div>
                     <CardTitle>
                         {doc.type === 'quote' ? 'Devis' : "Facture"} {doc.number ?? 'XXX'} – {client.name}
                         <p>{client.address}</p>

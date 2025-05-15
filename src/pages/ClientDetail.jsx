@@ -219,6 +219,7 @@ export default function ClientDetail() {
                                     <TableRow>
                                         <TableHead>Type</TableHead>
                                         <TableHead>#</TableHead>
+                                        <TableHead>Titre</TableHead>
                                         <TableHead>Date</TableHead>
                                         <TableHead>Total TTC</TableHead>
                                         <TableHead>Status</TableHead>
@@ -228,10 +229,11 @@ export default function ClientDetail() {
                                 </TableHeader>
                                 <TableBody>
                                     {clientDocs.map((d) => (
-                                        <TableRow key={d.number} className="hover:bg-muted">
+                                        <TableRow key={d.id} className="hover:bg-muted">
                                             <TableCell>{d.type === "quote" ? "Devis" : "Facture"}</TableCell>
-                                            <TableCell>{d.id}</TableCell>
-                                            <TableCell>{new Date(d.createdAt).toLocaleDateString()}</TableCell>
+                                            <TableCell>{d.number ? d.number : '—' }</TableCell>
+                                            <TableCell>{d.title}</TableCell>
+                                            <TableCell>{d.date ? new Date(d.date).toLocaleDateString("fr-FR") : '–'}</TableCell>
                                             <TableCell>{d.totals.ttc.toFixed(2)} €</TableCell>
                                             <TableCell className="flex items-center gap-2 border-none">
                                             <span

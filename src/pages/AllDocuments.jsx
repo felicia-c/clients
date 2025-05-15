@@ -42,9 +42,9 @@ export default function AllDocuments() {
                                 {docs.map((d) => (
                                     <TableRow key={d.id}>
                                         <TableCell>{d.type === "quote" ? "Devis" : "Facture"}</TableCell>
-                                        <TableCell>{d.number}</TableCell>
+                                        <TableCell>{d.number ? d.number : ''}</TableCell>
                                         <TableCell>{getClientName(d.clientId)}</TableCell>
-                                        <TableCell>{new Date(d.createdAt).toLocaleDateString()}</TableCell>
+                                        <TableCell>{ d.date ? new Date(d.date).toLocaleDateString("fr-FR") : '—' }</TableCell>
                                         <TableCell>{d.totals.ttc.toFixed(2)} €</TableCell>
                                         <TableCell>{d.status}</TableCell>
                                         <TableCell>
