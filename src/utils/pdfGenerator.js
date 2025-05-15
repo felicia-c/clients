@@ -108,7 +108,7 @@ export async function generatePdfFromDoc(doc, client, account, docs, updateDoc, 
         const lines = pdf.splitTextToSize(cleanText, 180);
         pdf.text(lines, 14, 110);
         pdf.setFont(undefined, "normal");
-        y = 110 + lines.length * 6;
+        y = 110 + lines.length * 5;
     }
 
     autoTable(pdf, {
@@ -156,10 +156,15 @@ export async function generatePdfFromDoc(doc, client, account, docs, updateDoc, 
 
     // Totaux
     y = pdf.lastAutoTable.finalY + 10;
-    if (y > 270) {
+
+    // Forcer saut de page si pas assez de place pour mentions + signatures
+    const minSpaceNeeded = 50;
+    const pageHeight = pdf.internal.pageSize.height;
+    if (y + minSpaceNeeded > pageHeight - 20) {
         pdf.addPage();
         y = 20;
     }
+
     pdf.setFontSize(10);
     pdf.text(`Sous-total HT : ${totals.ht.toFixed(2)} €`, 120, y);
     y += 6;
@@ -195,7 +200,7 @@ export async function generatePdfFromDoc(doc, client, account, docs, updateDoc, 
         pdf.setPage(i);
         pdf.setFontSize(8);
         if(i > 1) {
-            pdf.text(headerText, 14, y);
+            pdf.text(headerText, 14, 10);
         }
         pdf.text(`Page ${i} / ${pageCount}`, 100, 290); // centré bas de page
     }
